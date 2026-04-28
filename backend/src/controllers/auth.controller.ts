@@ -3,59 +3,57 @@ import bcrypt from 'bcryptjs';
 import prisma from '../utils/prisma';
 import { signToken } from '../utils/jwt';
 import { AppError } from '../middleware/errorHandler';
-import { z } from 'zod';
-
-const registerSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(['ADMIN', 'WORKSHOP_STAFF', 'MANAGER']).optional(),
-  phone: z.string().optional(),
-});
-
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
+import { sendSuccess } from '../utils/apiResponse';
+import { AuthRequest } from '../middleware/auth.middleware';
 
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = registerSchema.parse(req.body);
-    const existing = await prisma.user.findUnique({ where: { email: data.email } });
-    if (existing) throw new AppError('Email already in use', 409);
-
-    const hashedPassword = await bcrypt.hash(data.password, 12);
+    const { name, email, password, role } = req.body;
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) throw new AppError('Email already registered', 409);
+    const hashed = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
-      data: { ...data, password: hashedPassword },
-      select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true },
+      data: { name, email, password: hashed, role: role || 'WORKSHOP_STAFF' },
+      select: { id: true, name: true, email: true, role: true, createdAt: true },
     });
-
     const token = signToken({ userId: user.id, email: user.email, role: user.role });
-    res.status(201).json({ success: true, token, user });
+    sendSuccess(res, { user, token }, 'Registered successfully', 201);
   } catch (err) { next(err); }
 };
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
+    const { email, password } = req.body;
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !await bcrypt.compare(password, user.password)) {
-      throw new AppError('Invalid email or password', 401);
-    }
-    if (!user.active) throw new AppError('Account deactivated', 403);
-
+    if (!user || !user.isActive) throw new AppError('Invalid credentials', 401);
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) throw new AppError('Invalid credentials', 401);
     const token = signToken({ userId: user.id, email: user.email, role: user.role });
-    const { password: _, ...safeUser } = user;
-    res.json({ success: true, token, user: safeUser });
+    const { password: _, ...userWithoutPassword } = user;
+    sendSuccess(res, { user: userWithoutPassword, token }, 'Login successful');
   } catch (err) { next(err); }
 };
 
-export const getMe = async (req: any, res: Response, next: NextFunction) => {
+export const getMe = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true },
+      where: { id: req.user!.userId },
+      select: { id: true, name: true, email: true, role: true, createdAt: true },
     });
-    res.json({ success: true, user });
+    if (!user) throw new AppError('User not found', 404);
+    sendSuccess(res, user);
+  } catch (err) { next(err); }
+};
+
+export const changePassword = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+    if (!user) throw new AppError('User not found', 404);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) throw new AppError('Current password is incorrect', 400);
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: req.user!.userId }, data: { password: hashed } });
+    sendSuccess(res, null, 'Password changed successfully');
   } catch (err) { next(err); }
 };
