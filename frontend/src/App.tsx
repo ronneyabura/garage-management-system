@@ -1,39 +1,33 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
-import { Layout } from './components/common/Layout';
-import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { Vehicles } from './pages/Vehicles';
-import { JobCards } from './pages/JobCards';
-import { JobCardDetail } from './pages/JobCardDetail';
-import { Inventory } from './pages/Inventory';
-import { Reports } from './pages/Reports';
-import { Users } from './pages/Users';
+import Layout from './components/layout/Layout';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import VehiclesPage from './pages/VehiclesPage';
+import JobCardsPage from './pages/JobCardsPage';
+import InventoryPage from './pages/InventoryPage';
+import ReportsPage from './pages/ReportsPage';
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ children, roles }) => {
-  const { isAuthenticated, user } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (roles && user && !roles.includes(user.role)) return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
+const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = useAuthStore();
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
 export default function App() {
   const { isAuthenticated } = useAuthStore();
   return (
-    <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
-      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="vehicles" element={<Vehicles />} />
-        <Route path="job-cards" element={<JobCards />} />
-        <Route path="job-cards/:id" element={<JobCardDetail />} />
-        <Route path="inventory" element={<Inventory />} />
-        <Route path="reports" element={<ProtectedRoute roles={['ADMIN', 'MANAGER']}><Reports /></ProtectedRoute>} />
-        <Route path="users" element={<ProtectedRoute roles={['ADMIN']}><Users /></ProtectedRoute>} />
-      </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+          <Route index element={<DashboardPage />} />
+          <Route path="vehicles" element={<VehiclesPage />} />
+          <Route path="job-cards" element={<JobCardsPage />} />
+          <Route path="inventory" element={<InventoryPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
