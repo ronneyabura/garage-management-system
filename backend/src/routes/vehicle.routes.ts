@@ -1,16 +1,16 @@
 import { Router } from 'express';
-import { getVehicles, getVehicle, createVehicle, updateVehicle, deleteVehicle, getVehicleHistory, getDowntimeStats } from '../controllers/vehicle.controller';
+import { getAll, getById, create, update, remove, getServiceHistory, getDowntimeStats } from '../controllers/vehicle.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
-
 router.use(authenticate);
-router.get('/', getVehicles);
-router.get('/downtime', getDowntimeStats);
-router.get('/:id', getVehicle);
-router.get('/:id/history', getVehicleHistory);
-router.post('/', authorize('ADMIN', 'WORKSHOP_STAFF'), createVehicle);
-router.patch('/:id', authorize('ADMIN', 'WORKSHOP_STAFF'), updateVehicle);
-router.delete('/:id', authorize('ADMIN'), deleteVehicle);
+
+router.get('/', getAll);
+router.get('/:id', getById);
+router.get('/:id/service-history', getServiceHistory);
+router.get('/:id/downtime', getDowntimeStats);
+router.post('/', authorize('ADMIN', 'WORKSHOP_STAFF'), create);
+router.put('/:id', authorize('ADMIN', 'WORKSHOP_STAFF'), update);
+router.delete('/:id', authorize('ADMIN'), remove);
 
 export default router;

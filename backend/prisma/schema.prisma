@@ -35,19 +35,15 @@ enum TransactionType {
 }
 
 model User {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
-  email     String   @unique
+  email     String    @unique
   password  String
-  role      Role     @default(WORKSHOP_STAFF)
-  phone     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  assignedJobCards JobCard[] @relation("TechnicianJobCards")
-  createdJobCards  JobCard[] @relation("CreatedByJobCards")
-  auditLogs        AuditLog[]
+  role      Role      @default(WORKSHOP_STAFF)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  jobCards  JobCard[] @relation("AssignedTechnician")
 }
 
 model Vehicle {
@@ -56,123 +52,99 @@ model Vehicle {
   make           String
   model          String
   year           Int
-  vin            String?       @unique
   color          String?
-  mileage        Int           @default(0)
+  vin            String?       @unique
   assignedDriver String?
   status         VehicleStatus @default(AVAILABLE)
+  mileage        Int           @default(0)
   fuelType       String?
-  notes          String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
-
   jobCards       JobCard[]
 }
 
 model JobCard {
-  id            String        @id @default(uuid())
-  jobNumber     String        @unique
-  vehicleId     String
-  technicianId  String?
-  createdById   String
-  status        JobCardStatus @default(INTAKE)
-  priority      String        @default("NORMAL")
-  description   String
-  diagnosis     String?
-  workDone      String?
-  estimatedCost Float?
-  actualCost    Float?
-  mileageIn     Int?
-  mileageOut    Int?
-  scheduledDate DateTime?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id               String          @id @default(uuid())
+  jobNumber        String          @unique
+  vehicleId        String
+  vehicle          Vehicle         @relation(fields: [vehicleId], references: [id])
+  technicianId     String?
+  technician       User?           @relation("AssignedTechnician", fields: [technicianId], references: [id])
+  status           JobCardStatus   @default(INTAKE)
+  priority         String          @default("NORMAL")
+  description      String
+  estimatedCost    Float?
+  actualCost       Float?
+  intakeDate       DateTime        @default(now())
+  completionDate   DateTime?
+  notes            String?
+  mileageAtService Int?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  repairs          Repair[]
+  statusHistory    JobCardHistory[]
+}
 
-  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id])
-  technician  User?         @relation("TechnicianJobCards", fields: [technicianId], references: [id])
-  createdBy   User          @relation("CreatedByJobCards", fields: [createdById], references: [id])
-  repairs     Repair[]
-  statusLogs  StatusLog[]
+model JobCardHistory {
+  id        String        @id @default(uuid())
+  jobCardId String
+  jobCard   JobCard       @relation(fields: [jobCardId], references: [id])
+  status    JobCardStatus
+  notes     String?
+  changedBy String?
+  changedAt DateTime      @default(now())
 }
 
 model Repair {
-  id          String   @id @default(uuid())
+  id          String       @id @default(uuid())
   jobCardId   String
+  jobCard     JobCard      @relation(fields: [jobCardId], references: [id])
   description String
-  laborCost   Float    @default(0)
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  jobCard     JobCard       @relation(fields: [jobCardId], references: [id])
+  laborCost   Float        @default(0)
+  laborHours  Float        @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
   parts       RepairPart[]
 }
 
 model Part {
-  id           String   @id @default(uuid())
-  partNumber   String?  @unique
-  name         String
-  description  String?
-  category     String?
-  quantity     Int      @default(0)
-  minQuantity  Int      @default(5)
-  unitCost     Float
-  unitPrice    Float?
-  supplier     String?
-  location     String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  repairParts          RepairPart[]
-  inventoryTransactions InventoryTransaction[]
+  id            String                 @id @default(uuid())
+  partNumber    String                 @unique
+  name          String
+  description   String?
+  category      String?
+  unitCost      Float
+  quantity      Int                    @default(0)
+  minimumStock  Int                    @default(5)
+  unit          String                 @default("piece")
+  supplier      String?
+  location      String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  repairParts   RepairPart[]
+  transactions  InventoryTransaction[]
 }
 
 model RepairPart {
   id        String   @id @default(uuid())
   repairId  String
+  repair    Repair   @relation(fields: [repairId], references: [id])
   partId    String
+  part      Part     @relation(fields: [partId], references: [id])
   quantity  Int
   unitCost  Float
+  totalCost Float
   createdAt DateTime @default(now())
-
-  repair Repair @relation(fields: [repairId], references: [id])
-  part   Part   @relation(fields: [partId], references: [id])
 }
 
 model InventoryTransaction {
   id          String          @id @default(uuid())
   partId      String
+  part        Part            @relation(fields: [partId], references: [id])
   type        TransactionType
   quantity    Int
+  reason      String?
   reference   String?
-  notes       String?
-  createdById String?
+  performedBy String?
   createdAt   DateTime        @default(now())
-
-  part Part @relation(fields: [partId], references: [id])
-}
-
-model StatusLog {
-  id        String        @id @default(uuid())
-  jobCardId String
-  status    JobCardStatus
-  notes     String?
-  createdAt DateTime      @default(now())
-
-  jobCard JobCard @relation(fields: [jobCardId], references: [id])
-}
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String?
-  action    String
-  entity    String
-  entityId  String?
-  details   Json?
-  ipAddress String?
-  createdAt DateTime @default(now())
-
-  user User? @relation(fields: [userId], references: [id])
 }

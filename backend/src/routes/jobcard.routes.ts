@@ -1,15 +1,16 @@
 import { Router } from 'express';
-import { getJobCards, getJobCard, createJobCard, updateJobCardStatus, updateJobCard, addRepair } from '../controllers/jobcard.controller';
+import { getAll, getById, create, update, updateStatus, addRepair, getDashboardStats } from '../controllers/jobcard.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
-
 router.use(authenticate);
-router.get('/', getJobCards);
-router.get('/:id', getJobCard);
-router.post('/', authorize('ADMIN', 'WORKSHOP_STAFF'), createJobCard);
-router.patch('/:id', authorize('ADMIN', 'WORKSHOP_STAFF'), updateJobCard);
-router.patch('/:id/status', authorize('ADMIN', 'WORKSHOP_STAFF'), updateJobCardStatus);
+
+router.get('/dashboard', getDashboardStats);
+router.get('/', getAll);
+router.get('/:id', getById);
+router.post('/', authorize('ADMIN', 'WORKSHOP_STAFF'), create);
+router.put('/:id', authorize('ADMIN', 'WORKSHOP_STAFF'), update);
+router.patch('/:id/status', authorize('ADMIN', 'WORKSHOP_STAFF'), updateStatus);
 router.post('/:id/repairs', authorize('ADMIN', 'WORKSHOP_STAFF'), addRepair);
 
 export default router;
