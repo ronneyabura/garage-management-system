@@ -1,134 +1,115 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import prisma from '../utils/prisma';
-import { AuthRequest } from '../middleware/auth.middleware';
+import { sendSuccess } from '../utils/apiResponse';
 
-export const getDashboardStats = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+export const getMaintenanceCost = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const [
-      totalVehicles, vehiclesByStatus, activeJobCards, jobCardsByStatus,
-      completedThisMonth, totalParts, lowStockParts, recentJobCards
-    ] = await Promise.all([
-      prisma.vehicle.count(),
-      prisma.vehicle.groupBy({ by: ['status'], _count: true }),
-      prisma.jobCard.count({ where: { status: { notIn: ['COMPLETED', 'CANCELLED'] } } }),
-      prisma.jobCard.groupBy({ by: ['status'], _count: true }),
-      prisma.jobCard.count({
-        where: {
-          status: 'COMPLETED',
-          completedAt: { gte: new Date(new Date().setDate(1)) },
-        },
-      }),
-      prisma.part.count(),
-      prisma.part.count({ where: { quantity: { lte: 5 } } }),
-      prisma.jobCard.findMany({
-        take: 5,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          vehicle: { select: { plateNumber: true, make: true, model: true } },
-          technician: { select: { name: true } },
-        },
-      }),
-    ]);
-
-    // Monthly repair trends (last 6 months)
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-    const monthlyTrends = await prisma.jobCard.groupBy({
-      by: ['status'],
-      where: { createdAt: { gte: sixMonthsAgo } },
-      _count: true,
-    });
-
-    res.json({
-      success: true,
-      data: {
-        totalVehicles,
-        vehiclesByStatus: Object.fromEntries(vehiclesByStatus.map(v => [v.status, v._count])),
-        activeJobCards,
-        jobCardsByStatus: Object.fromEntries(jobCardsByStatus.map(j => [j.status, j._count])),
-        completedThisMonth,
-        totalParts,
-        lowStockParts,
-        recentJobCards,
-        monthlyTrends,
-      },
-    });
-  } catch (err) { next(err); }
-};
-
-export const getMaintenanceCostReport = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { startDate, endDate } = req.query as any;
+    const { startDate, endDate, vehicleId } = req.query as any;
     const where: any = { status: 'COMPLETED' };
-    if (startDate) where.completedAt = { gte: new Date(startDate) };
-    if (endDate) where.completedAt = { ...where.completedAt, lte: new Date(endDate) };
+    if (startDate) where.intakeDate = { gte: new Date(startDate) };
+    if (endDate) where.completionDate = { lte: new Date(endDate) };
+    if (vehicleId) where.vehicleId = vehicleId;
 
     const jobCards = await prisma.jobCard.findMany({
       where,
-      include: {
-        vehicle: { select: { plateNumber: true, make: true, model: true } },
-        repairs: { include: { parts: { include: { part: { select: { name: true } } } } } },
-      },
+      include: { vehicle: { select: { plateNumber: true, make: true, model: true } } },
     });
 
-    const report = jobCards.map(jc => ({
-      jobNumber: jc.jobNumber,
-      vehicle: `${jc.vehicle.make} ${jc.vehicle.model} (${jc.vehicle.plateNumber})`,
-      completedAt: jc.completedAt,
-      laborCost: jc.repairs.reduce((s, r) => s + r.laborCost, 0),
-      partsCost: jc.repairs.reduce((s, r) => s + r.parts.reduce((ps, p) => ps + p.unitCost * p.quantity, 0), 0),
-      totalCost: jc.actualCost || 0,
-    }));
-
-    const totalCost = report.reduce((s, r) => s + r.totalCost, 0);
-    res.json({ success: true, data: report, summary: { totalJobs: report.length, totalCost } });
-  } catch (err) { next(err); }
-};
-
-export const getRepairFrequencyReport = async (_req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const vehicles = await prisma.vehicle.findMany({
-      include: { _count: { select: { jobCards: true } } },
-      orderBy: { jobCards: { _count: 'desc' } },
+    const byVehicle: any = {};
+    jobCards.forEach(jc => {
+      const key = jc.vehicleId;
+      if (!byVehicle[key]) byVehicle[key] = { vehicle: jc.vehicle, totalCost: 0, repairCount: 0 };
+      byVehicle[key].totalCost += jc.actualCost || 0;
+      byVehicle[key].repairCount++;
     });
 
-    res.json({
-      success: true,
-      data: vehicles.map(v => ({
-        id: v.id,
-        plateNumber: v.plateNumber,
-        make: v.make,
-        model: v.model,
-        totalRepairs: v._count.jobCards,
-        status: v.status,
-      })),
+    sendSuccess(res, {
+      summary: Object.values(byVehicle),
+      totalCost: jobCards.reduce((s, jc) => s + (jc.actualCost || 0), 0),
+      totalJobs: jobCards.length,
     });
   } catch (err) { next(err); }
 };
 
-export const getPartsConsumptionReport = async (_req: AuthRequest, res: Response, next: NextFunction) => {
+export const getRepairFrequency = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const repairParts = await prisma.repairPart.groupBy({
-      by: ['partId'],
-      _sum: { quantity: true, unitCost: true },
-      _count: true,
-      orderBy: { _sum: { quantity: 'desc' } },
+    const { months = 6 } = req.query as any;
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - Number(months));
+
+    const jobCards = await prisma.jobCard.findMany({ where: { createdAt: { gte: startDate } } });
+
+    const byMonth: any = {};
+    jobCards.forEach(jc => {
+      const month = jc.createdAt.toISOString().slice(0, 7);
+      if (!byMonth[month]) byMonth[month] = { month, total: 0, completed: 0, pending: 0 };
+      byMonth[month].total++;
+      if (jc.status === 'COMPLETED') byMonth[month].completed++;
+      else byMonth[month].pending++;
     });
 
-    const partIds = repairParts.map(r => r.partId);
-    const parts = await prisma.part.findMany({ where: { id: { in: partIds } } });
-    const partMap = Object.fromEntries(parts.map(p => [p.id, p]));
+    sendSuccess(res, {
+      monthlyTrend: Object.values(byMonth).sort((a: any, b: any) => a.month.localeCompare(b.month)),
+      totalJobs: jobCards.length,
+      completionRate: jobCards.length
+        ? Math.round((jobCards.filter(j => j.status === 'COMPLETED').length / jobCards.length) * 100)
+        : 0,
+    });
+  } catch (err) { next(err); }
+};
 
-    const report = repairParts.map(r => ({
-      partId: r.partId,
-      partName: partMap[r.partId]?.name || 'Unknown',
-      totalUsed: r._sum.quantity || 0,
-      totalCost: (r._sum.quantity || 0) * (partMap[r.partId]?.unitCost || 0),
-      currentStock: partMap[r.partId]?.quantity || 0,
-      usageCount: r._count,
+export const getDowntime = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { startDate, endDate } = req.query as any;
+    const where: any = { status: 'COMPLETED' };
+    if (startDate) where.intakeDate = { gte: new Date(startDate) };
+    if (endDate) where.completionDate = { lte: new Date(endDate) };
+
+    const jobCards = await prisma.jobCard.findMany({
+      where,
+      include: { vehicle: { select: { plateNumber: true, make: true, model: true } } },
+    });
+
+    const byVehicle: any = {};
+    jobCards.forEach(jc => {
+      const key = jc.vehicleId;
+      if (!byVehicle[key]) byVehicle[key] = { vehicle: jc.vehicle, totalDowntimeHours: 0, repairCount: 0 };
+      if (jc.completionDate) {
+        byVehicle[key].totalDowntimeHours += (jc.completionDate.getTime() - jc.intakeDate.getTime()) / (1000 * 60 * 60);
+      }
+      byVehicle[key].repairCount++;
+    });
+
+    const result = Object.values(byVehicle).map((v: any) => ({
+      ...v,
+      totalDowntimeHours: Math.round(v.totalDowntimeHours * 10) / 10,
+      avgDowntimeHours: v.repairCount ? Math.round((v.totalDowntimeHours / v.repairCount) * 10) / 10 : 0,
     }));
 
-    res.json({ success: true, data: report });
+    sendSuccess(res, {
+      byVehicle: result,
+      totalDowntimeHours: result.reduce((s: number, v: any) => s + v.totalDowntimeHours, 0),
+    });
+  } catch (err) { next(err); }
+};
+
+export const getPartsConsumption = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limit = 20 } = req.query as any;
+    const repairParts = await prisma.repairPart.findMany({
+      include: { part: { select: { name: true, category: true, unitCost: true } } },
+    });
+
+    const byPart: any = {};
+    repairParts.forEach(rp => {
+      if (!byPart[rp.partId]) byPart[rp.partId] = { part: rp.part, totalQuantity: 0, totalCost: 0, usageCount: 0 };
+      byPart[rp.partId].totalQuantity += rp.quantity;
+      byPart[rp.partId].totalCost += rp.totalCost;
+      byPart[rp.partId].usageCount++;
+    });
+
+    sendSuccess(res, Object.values(byPart)
+      .sort((a: any, b: any) => b.totalCost - a.totalCost)
+      .slice(0, Number(limit)));
   } catch (err) { next(err); }
 };

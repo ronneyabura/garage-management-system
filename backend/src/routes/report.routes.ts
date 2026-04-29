@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { getDashboardStats, getMaintenanceCostReport, getRepairFrequencyReport, getPartsConsumptionReport } from '../controllers/report.controller';
-import { authenticate } from '../middleware/auth.middleware';
+import { getMaintenanceCost, getRepairFrequency, getDowntime, getPartsConsumption } from '../controllers/report.controller';
+import { authenticate, authorize } from '../middleware/auth.middleware';
 
 const router = Router();
+router.use(authenticate, authorize('ADMIN', 'MANAGER'));
 
-router.use(authenticate);
-router.get('/dashboard', getDashboardStats);
-router.get('/maintenance-cost', getMaintenanceCostReport);
-router.get('/repair-frequency', getRepairFrequencyReport);
-router.get('/parts-consumption', getPartsConsumptionReport);
+router.get('/maintenance-cost', getMaintenanceCost);
+router.get('/repair-frequency', getRepairFrequency);
+router.get('/downtime', getDowntime);
+router.get('/parts-consumption', getPartsConsumption);
 
 export default router;
