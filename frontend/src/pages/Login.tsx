@@ -5,9 +5,9 @@ import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/api';
 import toast from 'react-hot-toast';
 
-export const Login: React.FC = () => {
+const Login: React.FC = () => {
   const [email, setEmail] = useState('admin@gms.com');
-  const [password, setPassword] = useState('password123');
+  const [password, setPassword] = useState('Admin@1234');
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,10 +19,10 @@ export const Login: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await authApi.login(email, password);
-      setAuth(res.data.user, res.data.token);
-      toast.success(`Welcome back, ${res.data.user.name}!`);
-      navigate('/dashboard');
+      const res = await authApi.login({ email, password });
+      setAuth(res.data.data.user, res.data.data.token);
+      toast.success(`Welcome back, ${res.data.data.user.name}!`);
+      navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed');
     } finally {
@@ -42,16 +42,13 @@ export const Login: React.FC = () => {
             </div>
             <span className="font-display text-white text-xl font-bold">GMS</span>
           </div>
-
           <h1 className="font-display text-5xl font-bold text-white mb-6 leading-tight">
             Fleet Operations<br />
             <span className="text-sky-400">Unified.</span>
           </h1>
-
           <p className="text-slate-400 text-lg mb-12 max-w-md leading-relaxed">
             Centralize vehicle servicing, repair workflows, and maintenance tracking across your entire workshop.
           </p>
-
           <div className="grid grid-cols-2 gap-4">
             {[
               { label: 'Vehicle Tracking', value: 'Real-time' },
@@ -68,7 +65,7 @@ export const Login: React.FC = () => {
         </div>
       </div>
 
-      {/* Right panel - Login form */}
+      {/* Right panel */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="flex items-center gap-2 mb-8 lg:hidden">
@@ -77,7 +74,6 @@ export const Login: React.FC = () => {
             </div>
             <span className="font-display text-white font-bold">GMS</span>
           </div>
-
           <h2 className="font-display text-3xl font-bold text-white mb-2">Sign in</h2>
           <p className="text-slate-400 mb-8">Enter your credentials to access the system</p>
 
@@ -90,23 +86,22 @@ export const Login: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="label">Email Address</label>
+              <label className="block text-sm text-slate-400 mb-1">Email Address</label>
               <input
                 type="email"
-                className="input"
+                className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="you@company.com"
               />
             </div>
-
             <div>
-              <label className="label">Password</label>
+              <label className="block text-sm text-slate-400 mb-1">Password</label>
               <div className="relative">
                 <input
                   type={showPwd ? 'text' : 'password'}
-                  className="input pr-10"
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 pr-10"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -121,7 +116,6 @@ export const Login: React.FC = () => {
                 </button>
               </div>
             </div>
-
             <button
               type="submit"
               disabled={loading}
@@ -135,13 +129,13 @@ export const Login: React.FC = () => {
             <p className="text-xs text-slate-400 font-medium mb-2 uppercase tracking-wide">Demo Accounts</p>
             <div className="space-y-1">
               {[
-                { label: 'Admin', email: 'admin@gms.com' },
-                { label: 'Manager', email: 'manager@gms.com' },
-                { label: 'Technician', email: 'tech1@gms.com' },
-              ].map(({ label, email: e }) => (
+                { label: 'Admin', email: 'admin@gms.com', pwd: 'Admin@1234' },
+                { label: 'Manager', email: 'manager@gms.com', pwd: 'Staff@1234' },
+                { label: 'Technician', email: 'john.tech@gms.com', pwd: 'Staff@1234' },
+              ].map(({ label, email: e, pwd }) => (
                 <button
                   key={e}
-                  onClick={() => { setEmail(e); setPassword('password123'); }}
+                  onClick={() => { setEmail(e); setPassword(pwd); }}
                   className="w-full text-left text-xs text-slate-400 hover:text-sky-400 transition-colors py-0.5"
                 >
                   <span className="font-medium">{label}:</span> {e}
@@ -154,3 +148,5 @@ export const Login: React.FC = () => {
     </div>
   );
 };
+
+export default Login;
